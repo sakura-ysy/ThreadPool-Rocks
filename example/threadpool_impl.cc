@@ -82,7 +82,7 @@ private:
   Env::CpuPriority cpu_priority_;      // CPU优先级
   Env::Priority priority_;             // 线程池优先级
   Env* env_;                           // 全局Env
-  int queue_len_;                      // 任务队列queue_的长度
+  std::atomic_uint queue_len_;         // 任务队列queue_的长度
     
   int total_threads_limit_;            // 线程池容纳的最大线程数
   
@@ -110,6 +110,7 @@ inline ThreadPoolImpl::Impl::Impl()
       cpu_priority_(Env::CpuPriority::kNormal),
       priority_(Env::LOW),
       env_(nullptr),
+      queue_len_(0),
       total_threads_limit_(0),
       exit_all_threads_(false),
       wait_for_jobs_to_complete_(false),

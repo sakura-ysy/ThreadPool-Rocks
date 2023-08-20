@@ -35,9 +35,9 @@ public:
   // serialized.
   // When the UnSchedule function is called, the unschedFunction
   // registered at the time of Schedule is invoked with arg as a parameter.
-  virtual void Schedule(void (*function)(void* arg), void* arg,
+  virtual void Schedule(void (*function)(void* arg1), void* arg1,
                         Priority pri = LOW, void* tag = nullptr,
-                        void (*unschedFunction)(void* arg) = nullptr) = 0;
+                        void (*unschedFunction)(void* arg) = nullptr, void* arg2 = nullptr) = 0;
 
   // Arrange to remove jobs for given arg from the queue_ if they are not
   // already scheduled. Caller is expected to have exclusive lock on arg.
@@ -74,9 +74,9 @@ public:
   explicit EnvWrapper(Env* target) : target_(target){};
   virtual ~EnvWrapper() = 0;
 
-  void Schedule(void (*f)(void* arg), void* a, Priority pri,
-                void* tag = nullptr, void (*u)(void* arg) = nullptr) override {
-    return target_->Schedule(f, a, pri, tag, u);
+  void Schedule(void (*f)(void* arg1), void* arg1, Priority pri,
+                void* tag = nullptr, void (*u)(void* arg2) = nullptr, void* arg2 = nullptr) override {
+    return target_->Schedule(f, arg1, pri, tag, u, arg2);
   }
 
   int UnSchedule(void* tag, Priority pri) override {

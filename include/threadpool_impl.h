@@ -1,3 +1,4 @@
+#pragma once
 #include <functional>
 #include <memory>
 #include <env.h>
@@ -30,14 +31,6 @@ public:
   // start yet
   void WaitForJobsAndJoinAllThreads() override;
 
-  // Make threads to run at a lower kernel IO priority
-  // Currently only has effect on Linux
-  void LowerIOPriority();
-
-  // Make threads to run at a lower kernel CPU priority
-  // Currently only has effect on Linux
-  void LowerCPUPriority(Env::CpuPriority pri);
-
   // Ensure there is at aleast num threads in the pool
   // but do not kill threads if there are more
   void IncBackgroundThreadsIfNeeded(int num);
@@ -54,7 +47,8 @@ public:
   // Can be used to filter and unschedule jobs by a tag
   // that are still in the queue and did not start running
   void Schedule(void (*function)(void* arg1), void* arg1,
-                void (*unschedFunction)(void* arg2), void* arg2, void* tag);
+                void* tag,
+                void (*unschedFunction)(void* arg2) = nullptr, void* arg2 = nullptr);
 
   // Filter jobs that are still in a queue and match
   // the given tag. Remove them from a queue if any

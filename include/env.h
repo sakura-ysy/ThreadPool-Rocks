@@ -1,5 +1,5 @@
+#pragma once
 #include <stdint.h>
-
 #include <cstdarg>
 #include <functional>
 #include <limits>
@@ -17,13 +17,6 @@ public:
 
   // Priority for scheduling job in thread pool
   enum Priority { BOTTOM, LOW, HIGH, USER, TOTAL };
-
-  enum CpuPriority {
-    kIdle = 0,
-    kLow = 1,
-    kNormal = 2,
-    kHigh = 3,
-  };
 
   // Arrange to run "(*function)(arg)" once in a background thread, in
   // the thread pool specified by pri. By default, jobs go to the 'LOW'
@@ -47,62 +40,28 @@ public:
   // When "function(arg)" returns, the thread will be destroyed.
   virtual void StartThread(void (*function)(void* arg), void* arg) = 0;
 
-    // Wait for all threads started by StartThread to terminate.
-  virtual void WaitForJoin() {}
+  // wake up all threads and join them so that they can end
+  virtual void JoinAllThreads(Priority pri){}
 
-  // Reserve available background threads in the specified thread pool.
-  virtual int ReserveThreads(int /*threads_to_be_reserved*/, Priority /*pri*/) {
-    return 0;
-  }
-
-  // Release a specific number of reserved threads from the specified thread
-  // pool
-  virtual int ReleaseThreads(int /*threads_to_be_released*/, Priority /*pri*/) {
-    return 0;
-  }
+  // JoinAllThreads but wait the uncompleted jobs
+  virtual void WaitForJobsAndJoinAllThreads(Priority pri){}
 
   // Get thread pool queue length for specific thread pool.
   virtual unsigned int GetThreadPoolQueueLen(Priority /*pri*/ = LOW) const {
     return 0;
   }
 
-};
+  // The number of background worker threads of a specific thread pool
+  // for this environment. 'LOW' is the default pool.
+  // default number: 1
+  virtual void SetBackgroundThreads(int num, Priority pri) {}
 
-// Env封装类
-class EnvWrapper : public Env{
-public:
-  explicit EnvWrapper(Env* target) : target_(target){};
-  virtual ~EnvWrapper() = 0;
-
-  void Schedule(void (*f)(void* arg1), void* arg1, Priority pri,
-                void* tag = nullptr, void (*u)(void* arg2) = nullptr, void* arg2 = nullptr) override {
-    return target_->Schedule(f, arg1, pri, tag, u, arg2);
+  virtual int GetBackgroundThreads(Priority pri) {
+    return 0;
   }
 
-  int UnSchedule(void* tag, Priority pri) override {
-    return target_->UnSchedule(tag, pri);
-  }
+  virtual void LowerThreadPoolIOPriority(Priority pri) {}
 
-  void StartThread(void (*f)(void*), void* a) override {
-    return target_->StartThread(f, a);
-  }
+  virtual void LowerThreadPoolCPUPriority(Priority pri) {}
 
-  void WaitForJoin() override {
-    return target_->WaitForJoin(); 
-  }
-
-  int ReserveThreads(int threads_to_be_reserved, Priority pri) override {
-    return target_->ReserveThreads(threads_to_be_reserved, pri);
-  } 
-
-  int ReleaseThreads(int threads_to_be_released, Priority pri) override {
-    return target_->ReleaseThreads(threads_to_be_released, pri);
-  }
-
-  unsigned int GetThreadPoolQueueLen(Priority pri = LOW) const override {
-    return target_->GetThreadPoolQueueLen(pri);
-  }
-
-private:
-  Env* target_;
 };

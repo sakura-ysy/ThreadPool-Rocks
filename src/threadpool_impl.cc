@@ -34,10 +34,6 @@ public:
     return queue_len_.load(std::memory_order_relaxed);
   }
 
-  void LowerIOPriority();
-
-  void LowerCPUPriority(Env::CpuPriority pri);
-
   void WakeUpAllThreads() { bgsignal_.notify_all(); }
 
   void BGThread(size_t thread_id);
@@ -78,8 +74,6 @@ public:
 private:
   static void BGThreadWrapper(void* arg);
 
-  bool low_io_priority_;               // IO优先级是否为low
-  Env::CpuPriority cpu_priority_;      // CPU优先级
   Env::Priority priority_;             // 线程池优先级
   Env* env_;                           // 全局Env
   std::atomic_uint queue_len_;         // 任务队列queue_的长度
@@ -108,9 +102,7 @@ private:
 };
 
 inline ThreadPoolImpl::Impl::Impl()
-    : low_io_priority_(false),
-      cpu_priority_(Env::CpuPriority::kNormal),
-      priority_(Env::LOW),
+    : priority_(Env::LOW),
       env_(nullptr),
       queue_len_(0),
       total_threads_limit_(0),
@@ -148,22 +140,40 @@ void ThreadPoolImpl::Impl::JoinThreads(bool wait_for_jobs_to_complete){
   exit_all_threads_ = false;
 }
 
-// IO优先级降为low
-inline void ThreadPoolImpl::Impl::LowerIOPriority(){
-  std::lock_guard<std::mutex> lock(mu_);
-  low_io_priority_ = true;
-}
-
-// 设置CPU优先级
-inline void ThreadPoolImpl::Impl::LowerCPUPriority(Env::CpuPriority pri){
-  std::lock_guard<std::mutex> lock(mu_);
-  cpu_priority_ = pri;
-}
 
 // 线程函数
 void ThreadPoolImpl::Impl::BGThread(size_t thread_id){
-  bool low_io_priority = false;
-  Env::CpuPriority current_cpu_priority = Env::CpuPriority::kNormal;
+  // One io priority is said to be higher than another one 
+  // if it belongs to a higher priority class.
+  int io_priority_class = priority_;
+
+  // The cpu prio argument is a value in the range -20 to 19
+  // with -20 being the highest priority and 19 being the lowest priority
+  int cpu_priority = 19 - 5*priority_; 
+  cpu_priority = std::max(cpu_priority, -20);
+
+  // Set the io and cpu priority
+#ifdef OS_LINUX
+#define IOPRIO_CLASS_SHIFT (13)
+#define IOPRIO_PRIO_VALUE(class, data) (((class) << IOPRIO_CLASS_SHIFT) | data)
+  // io: https://www.man7.org/linux/man-pages/man2/ioprio_set.2.html
+  syscall(SYS_ioprio_set, 1,  // IOPRIO_WHO_PROCESS
+          0,                  // current thread
+          IOPRIO_PRIO_VALUE(io_priority_class, 0));
+
+  // cpu: https://www.man7.org/linux/man-pages/man2/setpriority.2.html
+  setpriority(
+    PRIO_PROCESS,
+    // Current thread.
+    0,
+    // nice value
+    cpu_priority);
+
+#else
+    (void)io_priority_class;  // avoid 'unused variable' error
+    (void)cpu_priority;
+#endif
+
 
   while(true){
     // Wait until there is an item that is ready to run
@@ -210,38 +220,7 @@ void ThreadPoolImpl::Impl::BGThread(size_t thread_id){
     queue_.pop_front();
     queue_len_.store(static_cast<unsigned int>(queue_.size()), std::memory_order_relaxed);
 
-    bool decrease_io_priority = (low_io_priority != low_io_priority_);
-    Env::CpuPriority cpu_priority = cpu_priority_;
     lock.unlock();
-
-    if(cpu_priority < current_cpu_priority) {
-      // 0 means current thread.
-      port::SetCpuPriority(0, cpu_priority);
-      current_cpu_priority = cpu_priority;
-    }
-
-#ifdef OS_LINUX
-    if (decrease_io_priority) {
-#define IOPRIO_CLASS_SHIFT (13)
-#define IOPRIO_PRIO_VALUE(class, data) (((class) << IOPRIO_CLASS_SHIFT) | data)
-      // Put schedule into IOPRIO_CLASS_IDLE class (lowest)
-      // These system calls only have an effect when used in conjunction
-      // with an I/O scheduler that supports I/O priorities. As at
-      // kernel 2.6.17 the only such scheduler is the Completely
-      // Fair Queuing (CFQ) I/O scheduler.
-      // To change scheduler:
-      //  echo cfq > /sys/block/<device_name>/queue/schedule
-      // Tunables to consider:
-      //  /sys/block/<device_name>/queue/slice_idle
-      //  /sys/block/<device_name>/queue/slice_sync
-      syscall(SYS_ioprio_set, 1,  // IOPRIO_WHO_PROCESS
-              0,                  // current thread
-              IOPRIO_PRIO_VALUE(3, 0));
-      low_io_priority = true;
-    }
-#else
-    (void)decrease_io_priority;  // avoid 'unused variable' error
-#endif
 
     // 执行任务
     func();
@@ -289,7 +268,7 @@ int ThreadPoolImpl::Impl::GetBackgroundThreads() {
 void ThreadPoolImpl::Impl::StartBGThreads() {
   // Start background thread if necessary
   while ((int)bgthreads_.size() < total_threads_limit_) {
-    port::Thread p_t(&BGThreadWrapper,
+    std::thread p_t(&BGThreadWrapper,
                      new BGThreadMetadata(this, bgthreads_.size()));
     bgthreads_.push_back(std::move(p_t));
   }
@@ -384,12 +363,6 @@ void ThreadPoolImpl::WaitForJobsAndJoinAllThreads() {
   impl_->JoinThreads(true);
 }
 
-void ThreadPoolImpl::LowerIOPriority() { impl_->LowerIOPriority(); }
-
-void ThreadPoolImpl::LowerCPUPriority(Env::CpuPriority pri) {
-  impl_->LowerCPUPriority(pri);
-}
-
 void ThreadPoolImpl::IncBackgroundThreadsIfNeeded(int num) {
   impl_->SetBackgroundThreadsInternal(num, false);
 }
@@ -404,7 +377,8 @@ void ThreadPoolImpl::SubmitJob(std::function<void()>&& job) {
 }
 
 void ThreadPoolImpl::Schedule(void (*function)(void* arg1), void* arg1, 
-                              void (*unschedFunction)(void* arg2), void* arg2, void* tag){
+                              void* tag,
+                              void (*unschedFunction)(void* arg2), void* arg2){
   if (unschedFunction == nullptr) {
     impl_->Submit(std::bind(function, arg1), std::function<void()>(), tag);
   } else {

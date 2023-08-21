@@ -1,43 +1,40 @@
-#if defined(OS_LINUX)
-#include <linux/fs.h>
-#endif
-#include <pthread.h>
-#include <signal.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <assert.h>
-#if defined(OS_LINUX) || defined(OS_SOLARIS) || defined(OS_ANDROID)
-#include <sys/statfs.h>
-#include <sys/syscall.h>
-#include <sys/sysmacros.h>
-#endif
-#include <sys/time.h>
-#include <time.h>
-#include <algorithm>
-// Get nano time includes
-#if defined(OS_LINUX) || defined(OS_FREEBSD)
-#elif defined(__MACH__)
-#include <mach/clock.h>
-#include <mach/mach.h>
-#else
-#include <chrono>
-#endif
-#include <deque>
-#include <vector>
+#include "env_posix.h"
 
-#include "threadpool_impl.h"
-#include "env.h"
+void PosixEnv::Schedule(void (*function)(void* arg1), void* arg1, Priority pri,
+                void* tag,
+                void (*unschedFunction)(void* arg2), void* arg2) {
+  assert(pri >= Priority::BOTTOM && pri <= Priority::HIGH);
+  thread_pools_[pri].Schedule(function, arg1, tag, unschedFunction, arg2);
+}
 
-class PosixEnv : public Env {
-public:
-  PosixEnv(/* args */);
-  ~PosixEnv();
+int PosixEnv::UnSchedule(void* tag, Priority pri) {
+  assert(pri >= Priority::BOTTOM && pri <= Priority::HIGH);
+  return thread_pools_[pri].UnSchedule(tag);
+}
 
-private:
-  friend Env* Env::Default();
+void PosixEnv::JoinAllThreads(Priority pri) {
+  thread_pools_[pri].JoinAllThreads();
+}
 
-  std::vector<ThreadPoolImpl>& thread_pools_;
-  pthread_mutex_t& mu_;
-  std::vector<pthread_t>& threads_to_join_;
-};
+void PosixEnv::WaitForJobsAndJoinAllThreads(Priority pri) {
+  thread_pools_[pri].WaitForJobsAndJoinAllThreads();
+}
+
+unsigned int PosixEnv::GetThreadPoolQueueLen(Priority pri) const {
+  assert(pri >= Priority::BOTTOM && pri <= Priority::HIGH);
+  return thread_pools_[pri].GetQueueLen();
+}
+
+void PosixEnv::SetBackgroundThreads(int num, Priority pri)  {
+  assert(pri >= Priority::BOTTOM && pri <= Priority::HIGH);
+  thread_pools_[pri].SetBackgroundThreads(num);
+}
+
+int PosixEnv::GetBackgroundThreads(Priority pri) {
+  assert(pri >= Priority::BOTTOM && pri <= Priority::HIGH);
+  return thread_pools_[pri].GetBackgroundThreads();
+}
+
+
+
+

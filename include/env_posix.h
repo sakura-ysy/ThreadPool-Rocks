@@ -42,8 +42,6 @@ public:
 
   int UnSchedule(void* arg, Priority pri) override;
 
-  void StartThread(void (*function)(void* arg), void* arg) override;
-
   void JoinAllThreads(Priority pri) override;
 
   void WaitForJobsAndJoinAllThreads(Priority pri) override;
@@ -58,8 +56,7 @@ public:
 private:
   friend Env* Env::Default();
 
-  std::vector<ThreadPoolImpl>& thread_pools_;
-  pthread_mutex_t& mu_;
-  std::vector<pthread_t>& threads_to_join_;
+  std::vector<ThreadPoolImpl> thread_pools_;
+  pthread_mutex_t mu_;
 };
 

@@ -36,10 +36,6 @@ public:
   // already scheduled. Caller is expected to have exclusive lock on arg.
   virtual int UnSchedule(void* /*arg*/, Priority /*pri*/) { return 0; }
 
-  // Start a new thread, invoking "function(arg)" within the new thread.
-  // When "function(arg)" returns, the thread will be destroyed.
-  virtual void StartThread(void (*function)(void* arg), void* arg) = 0;
-
   // wake up all threads and join them so that they can end
   virtual void JoinAllThreads(Priority pri){}
 

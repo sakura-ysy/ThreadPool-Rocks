@@ -1,6 +1,9 @@
 #include "env.h"
 #include "env_posix.h"
 
+Env::Env(){
+}
+
 Env::~Env(){
 }
 

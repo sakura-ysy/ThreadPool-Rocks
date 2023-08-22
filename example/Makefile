@@ -18,9 +18,9 @@ STATIC_LIBPATH = ../libthreadpool.a
 all : test_env
 
 test_env: test_env.cc
-	$(CC) $(CFLAGS) $@.cc $(INCLUDE_PATH) $(STATIC_LIBPATH) -o $@  $(LDFLAGS)
+	$(CC) $(CFLAGS) $@.cc $(INCLUDE_PATH) $(STATIC_LIBPATH) -o $@.o  $(LDFLAGS)
 
 
 # 4. clean the files except source file
 clean:
-	rm -f ./test_env
+	rm -f ./test_env.o

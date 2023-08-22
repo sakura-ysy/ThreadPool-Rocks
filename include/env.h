@@ -34,7 +34,7 @@ public:
 
   // Arrange to remove jobs for given arg from the queue_ if they are not
   // already scheduled. Caller is expected to have exclusive lock on arg.
-  virtual int UnSchedule(void* /*arg*/, Priority /*pri*/) { return 0; }
+  virtual int UnSchedule(void* /*tag*/, Priority /*pri*/) { return 0; }
 
   // wake up all threads and join them so that they can end
   virtual void JoinAllThreads(Priority pri){}
@@ -55,9 +55,4 @@ public:
   virtual int GetBackgroundThreads(Priority pri) {
     return 0;
   }
-
-  virtual void LowerThreadPoolIOPriority(Priority pri) {}
-
-  virtual void LowerThreadPoolCPUPriority(Priority pri) {}
-
 };
